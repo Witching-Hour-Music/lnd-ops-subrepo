@@ -1,0 +1,7 @@
+[Unit]
+Description=Local LND watchdog (health-check and reconnect peers)
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/fletchervaughn/.local/bin/lnd-watchdog-local.sh

@@ -1,0 +1,10 @@
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+**/wallet.pass
+**/*.macaroon
+**/tls.key
+**/*secret*
+**/*token*

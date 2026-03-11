@@ -1,0 +1,8 @@
+[Unit]
+Description=LND fee auto-tuner (liquidity-based)
+After=lnd.service
+Wants=lnd.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/lnd-fee-autotune.sh

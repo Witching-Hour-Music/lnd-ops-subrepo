@@ -1,0 +1,23 @@
+[Unit]
+Description=LND Liquidity Rebalancer (profit-protect)
+After=lnd.service
+Wants=lnd.service
+
+[Service]
+Type=simple
+Environment=LNCLI=/home/fletchervaughn/bin/ln
+Environment=MODE=profit_protect
+Environment=DAILY_FEE_BUDGET_SAT=60
+Environment=TARGET_LOW_PCT=42
+Environment=TARGET_HIGH_PCT=58
+Environment=MAX_ATTEMPTS_PER_DIR=4
+Environment=FEE_LIMIT_SAT=2
+Environment=PAY_TIMEOUT_SEC=20
+Environment=INVOICE_EXPIRY_SEC=300
+Environment=CHECK_INTERVAL_SEC=60
+ExecStart=/home/fletchervaughn/bin/flip_rebalance.sh
+Restart=always
+RestartSec=20
+
+[Install]
+WantedBy=default.target

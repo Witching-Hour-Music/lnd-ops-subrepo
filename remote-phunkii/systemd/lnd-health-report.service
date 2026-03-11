@@ -1,0 +1,7 @@
+[Unit]
+Description=LND health report snapshot
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/bin/lnd-health-report.sh

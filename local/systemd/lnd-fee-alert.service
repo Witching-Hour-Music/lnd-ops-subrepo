@@ -1,0 +1,8 @@
+[Unit]
+Description=LND fee increase alert watcher
+After=lnd.service
+Wants=lnd.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/lnd-fee-alert.sh

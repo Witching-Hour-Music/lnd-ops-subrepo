@@ -1,0 +1,8 @@
+[Unit]
+Description=LND hourly one-line summary
+After=lnd.service
+Wants=lnd.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/lnd-hourly-summary.sh

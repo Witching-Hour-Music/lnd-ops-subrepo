@@ -1,0 +1,14 @@
+[Unit]
+Description=LND (Lightning Network Daemon)
+Wants=network-online.target bitcoind-backup.service
+After=network-online.target bitcoind-backup.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -lc "test -f /home/fletchervaughn/.lnd/wallet.pass"
+ExecStart=/home/fletchervaughn/Downloads/lnd-linux-amd64-v0.20.1-beta/lnd-linux-amd64-v0.20.1-beta/lnd --wallet-unlock-password-file=/home/fletchervaughn/.lnd/wallet.pass --wtclient.active
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

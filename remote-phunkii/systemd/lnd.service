@@ -1,0 +1,14 @@
+[Unit]
+Description=LND (Lightning Network Daemon)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -lc "test -f %h/.lnd/wallet.pass"
+ExecStart=%h/go/bin/lnd --wallet-unlock-password-file=%h/.lnd/wallet.pass
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
