@@ -8,3 +8,6 @@
 **/tls.key
 **/*secret*
 **/*token*
+
+# Local configuration, rendered from config/lnd-ops.env.example
+config/lnd-ops.env

@@ -1,3 +1,9 @@
+# Template. Rendered by scripts/install.sh.
+#
+# NOTE: flip_rebalance.sh is NOT in this repository. It lives outside the
+# subrepo (historically ~/bin/flip_rebalance.sh) and must be present at
+# @FLIP_REBALANCE_BIN@ before this unit will start. scripts/install.sh skips
+# this unit when the script is missing. See README "Known gaps".
 [Unit]
 Description=LND Liquidity Rebalancer (profit-protect)
 After=lnd.service
@@ -5,7 +11,7 @@ Wants=lnd.service
 
 [Service]
 Type=simple
-Environment=LNCLI=/home/fletchervaughn/bin/ln
+Environment=LNCLI=@LNCLI@
 Environment=MODE=profit_protect
 Environment=DAILY_FEE_BUDGET_SAT=60
 Environment=TARGET_LOW_PCT=42
@@ -15,7 +21,7 @@ Environment=FEE_LIMIT_SAT=2
 Environment=PAY_TIMEOUT_SEC=20
 Environment=INVOICE_EXPIRY_SEC=300
 Environment=CHECK_INTERVAL_SEC=60
-ExecStart=/home/fletchervaughn/bin/flip_rebalance.sh
+ExecStart=@FLIP_REBALANCE_BIN@
 Restart=always
 RestartSec=20
 

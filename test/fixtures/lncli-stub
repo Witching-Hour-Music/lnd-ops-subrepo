@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Stand-in for lncli. Returns canned responses so the ops scripts can be
+# exercised with no Lightning node present. Records every invocation to
+# $STUB_CALL_LOG so tests can assert on what was called.
+set -euo pipefail
+[ -n "${STUB_CALL_LOG:-}" ] && printf '%s\n' "$*" >> "$STUB_CALL_LOG"
+
+case "${1:-}" in
+  getinfo)
+    cat <<'JSON'
+{"version":"0.20.1-beta","identity_pubkey":"02stub","num_peers":5,"num_active_channels":3,"num_inactive_channels":0,"synced_to_chain":true,"synced_to_graph":true}
+JSON
+    ;;
+  listchannels)
+    cat <<'JSON'
+{"channels":[
+ {"channel_point":"aaaa:0","local_balance":"900000","remote_balance":"100000"},
+ {"channel_point":"bbbb:1","local_balance":"500000","remote_balance":"500000"},
+ {"channel_point":"cccc:2","local_balance":"50000","remote_balance":"950000"},
+ {"channel_point":"dddd:3","local_balance":"0","remote_balance":"0"}
+]}
+JSON
+    ;;
+  feereport)
+    echo '{"channel_fees":[],"day_fee_sum":"12"}'
+    ;;
+  fwdinghistory)
+    cat <<'JSON'
+{"forwarding_events":[{"fee_msat":"1500"},{"fee_msat":"2500"},{"fee_msat":"1000"}]}
+JSON
+    ;;
+  updatechanpolicy)
+    echo '{"failed_updates":[]}'
+    ;;
+  connect)
+    echo '{}'
+    ;;
+  *)
+    echo "stub: unhandled command: ${1:-<none>}" >&2
+    exit 1
+    ;;
+esac

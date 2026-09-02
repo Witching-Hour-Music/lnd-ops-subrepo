@@ -4,4 +4,4 @@ After=default.target
 
 [Service]
 Type=oneshot
-ExecStart=/home/fletchervaughn/.local/bin/lnd-watchdog-local.sh
+ExecStart=%h/.local/bin/lnd-watchdog.sh
