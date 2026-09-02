@@ -1,0 +1,32 @@
+name: test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show environment
+        run: |
+          bash --version | head -1
+          jq --version
+          date -d '24 hours ago' +%s >/dev/null && echo "GNU date ok"
+
+      # The suite runs against test/fixtures/lncli-stub, so no Lightning node,
+      # network access or systemd user session is required.
+      - name: Run test suite
+        run: ./scripts/test.sh
+
+      # Read-only. Reports what is missing rather than failing on an absent node.
+      - name: Preflight
+        run: ./scripts/preflight.sh
+
+      - name: Check install renders for both roles
+        run: |
+          ./scripts/install.sh --role local --dry-run
+          ./scripts/install.sh --role remote --dry-run
