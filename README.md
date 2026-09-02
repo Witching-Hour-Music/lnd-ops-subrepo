@@ -8,7 +8,7 @@ Lightning node, network access, or systemd session is needed to run the tests.
 ## Quick start
 
 ```bash
-scripts/test.sh                            # 42 assertions against a stub node
+scripts/test.sh                            # 60 assertions against a stub node
 scripts/preflight.sh                       # what is configured, what is missing
 cp config/lnd-ops.env.example config/lnd-ops.env
 scripts/install.sh --role local --dry-run  # show what would be installed
@@ -27,6 +27,8 @@ Use `--role remote` on the phunkii node.
 | `bin/lnd-fee-alert.sh` | no | Compare 24h routing revenue here and on the remote node against the last run |
 | `bin/lnd-watchdog.sh` | restarts, reconnects | Restart lnd if down or RPC-unresponsive, then reconnect configured peers |
 | `bin/lnd-fee-autotune.sh` | **yes** | Set each channel's outbound fee from its local-balance ratio |
+| `bin/lnd-migrate-freeze.sh` | stops the node | Quiesce this host so `~/.lnd` can be copied elsewhere. Dry run by default. |
+| `bin/lnd-migrate-verify.sh` | no | Verify a restored `~/.lnd` on the destination before starting lnd |
 
 `lnd-fee-autotune.sh` is the only script that changes channel policy. Run it
 with `--dry-run` to log what it would do and call nothing.
@@ -35,6 +37,7 @@ with `--dry-run` to log what it would do and call nothing.
 
 ```
 bin/                        scripts, shared by both roles
+cloud/                      Azure migration runbook and neutrino config
 lib/common.sh               config resolution and helpers
 config/lnd-ops.env.example  every tunable, with production defaults
 local/systemd/              unit set for the workstation
@@ -42,6 +45,23 @@ remote-phunkii/systemd/     unit set for the phunkii node
 scripts/                    install, preflight, test
 test/fixtures/lncli-stub    canned lncli responses
 ```
+
+## Moving the node to another host
+
+See [`cloud/MIGRATION.md`](cloud/MIGRATION.md). The short version:
+
+```bash
+bin/lnd-migrate-freeze.sh            # dry run, read the plan
+bin/lnd-migrate-freeze.sh --confirm  # stop timers, then lnd, then archive
+# scp the archive and manifest across
+bin/lnd-migrate-verify.sh --manifest ~/lnd-manifest.sha256
+```
+
+Two copies of one wallet must never run at once. `freeze` stops every `lnd-*`
+timer before stopping lnd, because the watchdog otherwise restarts it within a
+minute, and it refuses to continue if the process or its RPC is still alive.
+`verify` checks the restored directory against the source checksums and
+confirms the identity-critical files arrived, `v3_onion_private_key` included.
 
 ## Configuration
 

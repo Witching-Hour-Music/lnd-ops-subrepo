@@ -1,0 +1,53 @@
+# lnd.conf for the Azure node, neutrino backend.
+#
+# Copy the ORIGINAL lnd.conf across with the rest of ~/.lnd, then apply the
+# backend change below. Do not start lnd with the old bitcoind settings on a
+# host that has no bitcoind; it will fail to start and you will not learn
+# anything useful from the error.
+#
+# Edit before the first start on the new host, never after.
+
+[Application Options]
+# Keep the alias and colour so the node looks the same to peers.
+# alias=<your existing alias>
+# color=<your existing color>
+
+# Auto-unlock, same as the workstation.
+wallet-unlock-password-file=/home/lnd/.lnd/wallet.pass
+
+# Watchtower client, matching the old --wtclient.active flag.
+wtclient.active=true
+
+# Listen locally only. Inbound arrives over the Tor hidden service, so there
+# is no need to open 9735 in the Azure network security group.
+listen=localhost:9735
+rpclisten=localhost:10009
+restlisten=localhost:8080
+
+[Bitcoin]
+bitcoin.mainnet=true
+bitcoin.node=neutrino
+
+[neutrino]
+# Public filter servers. Add or replace as you like; more peers is more
+# resilient. These are the commonly used mainnet neutrino peers.
+neutrino.addpeer=btcd.lnolymp.us:8333
+neutrino.addpeer=btcd-mainnet.lightning.computer:8333
+neutrino.addpeer=node.eldamar.icu:8333
+neutrino.addpeer=noad.sathoarder.com:8333
+
+# Neutrino cannot estimate fees from a local mempool, so lnd falls back to an
+# external fee API. This is the default endpoint; it is a privacy leak and a
+# third-party dependency, which is one of the reasons to move back to
+# bitcoind when the budget allows.
+feeurl=https://nodes.lightning.computer/fees/v1/btc-fee-estimates.json
+
+[tor]
+# Preserves the node's onion identity, provided v3_onion_private_key came
+# across in ~/.lnd. If that file is missing the address changes and peers
+# will not find the node.
+tor.active=true
+tor.v3=true
+tor.streamisolation=true
+tor.socks=127.0.0.1:9050
+tor.control=127.0.0.1:9051

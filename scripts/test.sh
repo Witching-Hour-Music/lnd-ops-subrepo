@@ -144,6 +144,63 @@ got="$(LND_ROLE=local bash -c '. "'"$REPO"'/lib/common.sh"; echo "$LND_MIN_ACTIV
 [ "$got" = "2" ]; check $? "local role defaults to 2 active channels (got $got)"
 echo
 
+echo "migration freeze (dry run)"
+FAKE="$SANDBOX/fakelnd"
+mkdir -p "$FAKE/.lnd/data/chain/bitcoin/mainnet"
+echo wallet   > "$FAKE/.lnd/data/chain/bitcoin/mainnet/wallet.db"
+echo channels > "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db"
+echo scb      > "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.backup"
+echo cert     > "$FAKE/.lnd/tls.cert"
+echo key      > "$FAKE/.lnd/tls.key"
+echo onion    > "$FAKE/.lnd/v3_onion_private_key"
+printf 'bitcoin.node=bitcoind\n' > "$FAKE/.lnd/lnd.conf"
+
+FREEZE_OUT="$(env HOME="$FAKE" LND_DIR="$FAKE/.lnd" OUT_DIR="$SANDBOX/mig" \
+  "$REPO/bin/lnd-migrate-freeze.sh" 2>&1)"; check $? "dry run exits clean"
+grep -q "mode:     dry run" <<<"$FREEZE_OUT"; check $? "announces dry-run mode"
+grep -q "Nothing changed" <<<"$FREEZE_OUT"; check $? "states nothing changed"
+[ ! -d "$SANDBOX/mig" ]; check $? "dry run creates no output directory"
+
+# The ordering trap: timers must be disabled before lnd is stopped, or the
+# watchdog restarts it underneath the copy.
+timers_line=$(grep -n "Stop and disable lnd-\* timers" <<<"$FREEZE_OUT" | cut -d: -f1)
+lnd_line=$(grep -n "Stop lnd.service\|Stop \$LND_SERVICE\|3\. Stop" <<<"$FREEZE_OUT" | cut -d: -f1 | head -1)
+[ -n "$timers_line" ] && [ -n "$lnd_line" ] && [ "$timers_line" -lt "$lnd_line" ]
+check $? "timers are stopped BEFORE lnd (watchdog trap)"
+grep -q "wallet material" <<<"$FREEZE_OUT"; check $? "warns the archive holds wallet material"
+grep -q "Nothing has been stopped" <<<"$FREEZE_OUT"; check $? "dry run does not claim the node was stopped"
+grep -q "stale channel state" <<<"$FREEZE_OUT"; check $? "warns against restarting the source"
+echo
+
+echo "migration verify"
+VERIFY_OUT="$(env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" 2>&1)"
+vrc=$?
+[ "$vrc" = 0 ]; check $? "passes on a complete data directory"
+grep -q "v3_onion_private_key present" <<<"$VERIFY_OUT"; check $? "detects the onion key"
+grep -q "bitcoin.node=bitcoind" <<<"$VERIFY_OUT"; check $? "reads the backend from lnd.conf"
+grep -q "edit lnd.conf before the first start" <<<"$VERIFY_OUT"; check $? "warns to switch backend before first start"
+
+# Losing the onion key changes the node address; must be called out.
+mv "$FAKE/.lnd/v3_onion_private_key" "$FAKE/.lnd/onion.bak"
+VERIFY_OUT="$(env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" 2>&1)"
+grep -q "its address will change" <<<"$VERIFY_OUT"; check $? "warns when the onion key is missing"
+mv "$FAKE/.lnd/onion.bak" "$FAKE/.lnd/v3_onion_private_key"
+
+# A missing channel.db is fatal, not a warning.
+mv "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db" "$FAKE/.lnd/chan.bak"
+env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "fails when channel.db is missing"
+mv "$FAKE/.lnd/chan.bak" "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db"
+
+# Checksum mismatch must be caught, not waved through.
+( cd "$FAKE/.lnd" && find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$SANDBOX/man.sha256"
+env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" --manifest "$SANDBOX/man.sha256" >/dev/null 2>&1
+check $? "passes with a matching manifest"
+echo corrupted > "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db"
+env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" --manifest "$SANDBOX/man.sha256" >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "fails when a file does not match the manifest"
+echo
+
 echo "no hardcoded home directories"
 # The only permitted absolute home path is the remote node's lncli, which is
 # a default for a *different* machine and lives in LND_REMOTE_LNCLI.
