@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# Run the ops scripts against a stub lncli in a throwaway HOME.
+# Requires no Lightning node, no network, and no systemd.
+set -uo pipefail
+REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+PASS=0
+FAIL=0
+ok()   { printf '  ok    %s\n' "$*"; PASS=$((PASS+1)); }
+no()   { printf '  FAIL  %s\n' "$*"; FAIL=$((FAIL+1)); }
+check() { if [ "$1" = 0 ]; then ok "$2"; else no "$2"; fi; }
+
+SANDBOX="$(mktemp -d)"
+trap 'rm -rf "$SANDBOX"' EXIT
+
+export HOME="$SANDBOX/home"
+export XDG_STATE_HOME="$HOME/.local/state"
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_CACHE_HOME="$HOME/.cache"
+mkdir -p "$HOME"
+
+export LNCLI="$REPO/test/fixtures/lncli-stub"
+export STUB_CALL_LOG="$SANDBOX/calls.log"
+: > "$STUB_CALL_LOG"
+# Do not pick up a real config from the checkout.
+export LND_OPS_CONFIG="$SANDBOX/none.env"
+
+echo "lnd-ops tests"
+echo "sandbox: $SANDBOX"
+echo
+
+echo "syntax"
+for f in "$REPO"/bin/*.sh "$REPO"/lib/*.sh "$REPO"/scripts/*.sh; do
+  bash -n "$f" 2>/dev/null; check $? "$(basename "$f")"
+done
+echo
+
+echo "fee ladder"
+# shellcheck disable=SC1091
+. "$REPO/lib/common.sh"
+set +e  # belt and braces: a library must not change our control flow
+ladder_ok=0
+for pair in 100:2 80:2 79:5 65:5 64:10 55:10 54:25 45:25 44:60 35:60 34:120 20:120 19:250 0:250; do
+  got="$(lnd_ops_map_ppm "${pair%%:*}")"
+  [ "$got" = "${pair##*:}" ] || { no "pct=${pair%%:*} expected ${pair##*:} got $got"; ladder_ok=1; }
+done
+check "$ladder_ok" "14 boundary values map to the documented ppm"
+echo
+
+echo "health report"
+"$REPO/bin/lnd-health-report.sh"; check $? "runs"
+[ -f "$XDG_STATE_HOME/lnd-health/latest.json" ]; check $? "writes latest.json"
+jq -e . "$XDG_STATE_HOME/lnd-health/latest.json" >/dev/null 2>&1; check $? "latest.json is valid JSON"
+# The stub is healthy, so nothing should be alerted.
+[ ! -s "$XDG_STATE_HOME/lnd-health/alerts.log" ]; check $? "healthy node logs no alert"
+
+# Now force a breach via thresholds rather than by editing the stub.
+LND_MIN_PEERS=99 "$REPO/bin/lnd-health-report.sh"
+grep -q 'peers=5' "$XDG_STATE_HOME/lnd-health/alerts.log" 2>/dev/null; check $? "threshold breach logs an alert"
+echo
+
+echo "hourly summary"
+"$REPO/bin/lnd-hourly-summary.sh"; check $? "runs"
+SUMMARY="$XDG_STATE_HOME/lnd-hourly-summary.log"
+grep -q 'peers=5 active=3 fwd24h=3 fee24h_sat=5' "$SUMMARY" 2>/dev/null
+check $? "sums 1500+2500+1000 msat to 5 sat over 3 forwards"
+echo
+
+echo "fee autotune"
+: > "$STUB_CALL_LOG"
+"$REPO/bin/lnd-fee-autotune.sh" --dry-run; check $? "dry run exits clean"
+! grep -q updatechanpolicy "$STUB_CALL_LOG"; check $? "dry run does NOT call updatechanpolicy"
+AUTOTUNE="$XDG_STATE_HOME/lnd-fee-autotune.log"
+grep -q 'chan=aaaa:0 .*local_pct=90 ppm=2 status=dry-run'   "$AUTOTUNE"; check $? "90% local -> 2 ppm"
+grep -q 'chan=bbbb:1 .*local_pct=50 ppm=25 status=dry-run'  "$AUTOTUNE"; check $? "50% local -> 25 ppm"
+grep -q 'chan=cccc:2 .*local_pct=5 ppm=250 status=dry-run'  "$AUTOTUNE"; check $? "5% local -> 250 ppm"
+grep -q 'chan=dddd:3 .*local_pct=50 ppm=25 status=dry-run'  "$AUTOTUNE"; check $? "zero-balance channel treated as 50%"
+
+: > "$STUB_CALL_LOG"
+"$REPO/bin/lnd-fee-autotune.sh" --apply >/dev/null 2>&1; check $? "apply run exits clean"
+[ "$(grep -c updatechanpolicy "$STUB_CALL_LOG")" = 4 ]; check $? "apply run updates all 4 channels"
+grep -q -- '--base_fee_msat=0 --fee_rate_ppm=2 --time_lock_delta=40' "$STUB_CALL_LOG"
+check $? "policy flags match the historical values"
+echo
+
+echo "watchdog"
+# No systemctl in most containers; the watchdog should still reach the node.
+: > "$STUB_CALL_LOG"
+mkdir -p "$(dirname "$XDG_CONFIG_HOME/lnd/watchdog-peers")"
+printf '02abc@1.2.3.4:9735\n# a comment\n\n' > "$XDG_CONFIG_HOME/lnd/watchdog-peers"
+"$REPO/bin/lnd-watchdog.sh" >/dev/null 2>&1; check $? "runs without a systemd user bus"
+grep -q 'connect 02abc@1.2.3.4:9735' "$STUB_CALL_LOG"; check $? "reconnects configured peers"
+[ "$(grep -c '^connect ' "$STUB_CALL_LOG")" = 1 ]; check $? "skips comments and blank lines"
+grep -q '^getinfo$' "$STUB_CALL_LOG"; check $? "performs the RPC health check"
+echo
+
+echo "lncli detection"
+# Helper: print the LNCLI that common.sh resolves, under the caller's env.
+cat > "$SANDBOX/show-lncli" <<SHOW
+#!/usr/bin/env bash
+. "$REPO/lib/common.sh"
+printf '%s' "\${LNCLI:-}"
+SHOW
+chmod +x "$SANDBOX/show-lncli"
+
+DETECT="$SANDBOX/detect"; mkdir -p "$DETECT/bin" "$DETECT/go/bin"
+# A decoy that behaves exactly like GNU coreutils ln.
+cat > "$DETECT/bin/ln" <<'DECOY'
+#!/usr/bin/env bash
+[ "${1:-}" = --version ] && { echo "ln (GNU coreutils) 9.4"; exit 0; }
+echo "ln: missing file operand" >&2; exit 1
+DECOY
+cat > "$DETECT/go/bin/lncli" <<'REAL'
+#!/usr/bin/env bash
+[ "${1:-}" = --version ] && { echo "lncli version 0.20.1-beta"; exit 0; }
+exit 0
+REAL
+chmod +x "$DETECT/bin/ln" "$DETECT/go/bin/lncli"
+
+got="$(env HOME="$DETECT" LNCLI= "$SANDBOX/show-lncli")"
+[ "$got" = "$DETECT/go/bin/lncli" ]
+check $? "prefers real lncli over a coreutils ln decoy (got ${got:-<none>})"
+
+rm -f "$DETECT/go/bin/lncli"
+got="$(env HOME="$DETECT" LNCLI= PATH="$DETECT/bin:$PATH" "$SANDBOX/show-lncli")"
+[ -z "$got" ]
+check $? "never selects coreutils ln (got ${got:-<none>})"
+
+got="$(env LNCLI=/opt/custom/lncli "$SANDBOX/show-lncli")"
+[ "$got" = /opt/custom/lncli ]
+check $? "an explicit LNCLI is used verbatim (got ${got:-<none>})"
+echo
+
+echo "config precedence"
+CFG="$SANDBOX/custom.env"
+printf 'LND_MIN_PEERS=42\nLND_FEE_BASE_MSAT=7\n' > "$CFG"
+got="$(LND_OPS_CONFIG="$CFG" bash -c '. "'"$REPO"'/lib/common.sh"; echo "$LND_MIN_PEERS/$LND_FEE_BASE_MSAT"')"
+[ "$got" = "42/7" ]; check $? "config file is read (got $got)"
+got="$(LND_OPS_CONFIG="$CFG" LND_MIN_PEERS=9 bash -c '. "'"$REPO"'/lib/common.sh"; echo "$LND_MIN_PEERS"')"
+[ "$got" = "9" ]; check $? "environment overrides the config file (got $got)"
+got="$(LND_ROLE=remote bash -c '. "'"$REPO"'/lib/common.sh"; echo "$LND_MIN_ACTIVE_CHANNELS"')"
+[ "$got" = "1" ]; check $? "remote role defaults to 1 active channel (got $got)"
+got="$(LND_ROLE=local bash -c '. "'"$REPO"'/lib/common.sh"; echo "$LND_MIN_ACTIVE_CHANNELS"')"
+[ "$got" = "2" ]; check $? "local role defaults to 2 active channels (got $got)"
+echo
+
+echo "no hardcoded home directories"
+# The only permitted absolute home path is the remote node's lncli, which is
+# a default for a *different* machine and lives in LND_REMOTE_LNCLI.
+SCAN=$(grep -rn '/home/fletchervaughn' "$REPO/bin" "$REPO/lib" "$REPO/scripts" \
+        "$REPO/local" "$REPO/remote-phunkii" "$REPO/config" 2>/dev/null | grep -v 'scripts/test\.sh')
+[ -z "$SCAN" ]; check $? "no /home/fletchervaughn anywhere${SCAN:+ (found: $SCAN)}"
+SCAN=$(grep -rn '/home/phunkii' "$REPO/bin" "$REPO/lib" "$REPO/scripts" \
+        "$REPO/local" "$REPO/remote-phunkii" 2>/dev/null \
+        | grep -v 'scripts/test\.sh' | grep -v 'LND_REMOTE_LNCLI')
+[ -z "$SCAN" ]; check $? "no /home/phunkii outside LND_REMOTE_LNCLI${SCAN:+ (found: $SCAN)}"
+echo
+
+echo "installer"
+"$REPO/scripts/install.sh" --role local --dry-run >/dev/null 2>&1;  check $? "dry-run install (local) exits clean"
+"$REPO/scripts/install.sh" --role remote --dry-run >/dev/null 2>&1; check $? "dry-run install (remote) exits clean"
+"$REPO/scripts/install.sh" --role bogus --dry-run >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "rejects an unknown role"
+echo
+
+printf 'tests: %d passed, %d failed\n' "$PASS" "$FAIL"
+[ "$FAIL" = 0 ]

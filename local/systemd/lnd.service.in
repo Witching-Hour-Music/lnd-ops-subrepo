@@ -1,0 +1,17 @@
+# Template. Rendered by scripts/install.sh, which substitutes @LND_BIN@ and
+# @LND_WALLET_PASS_FILE@. systemd requires a literal absolute path for the
+# ExecStart binary, so it cannot be an environment variable.
+[Unit]
+Description=LND (Lightning Network Daemon)
+Wants=network-online.target bitcoind-backup.service
+After=network-online.target bitcoind-backup.service
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -lc "test -f @LND_WALLET_PASS_FILE@"
+ExecStart=@LND_BIN@ --wallet-unlock-password-file=@LND_WALLET_PASS_FILE@ --wtclient.active
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

@@ -1,3 +1,4 @@
+# Template. Rendered by scripts/install.sh.
 [Unit]
 Description=LND (Lightning Network Daemon)
 Wants=network-online.target
@@ -5,8 +6,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=/bin/bash -lc "test -f %h/.lnd/wallet.pass"
-ExecStart=%h/go/bin/lnd --wallet-unlock-password-file=%h/.lnd/wallet.pass
+ExecStartPre=/bin/bash -lc "test -f @LND_WALLET_PASS_FILE@"
+ExecStart=@LND_BIN@ --wallet-unlock-password-file=@LND_WALLET_PASS_FILE@
 Restart=always
 RestartSec=5s
 
