@@ -163,8 +163,11 @@ grep -q "Nothing changed" <<<"$FREEZE_OUT"; check $? "states nothing changed"
 
 # The ordering trap: timers must be disabled before lnd is stopped, or the
 # watchdog restarts it underneath the copy.
-timers_line=$(grep -n "Stop and disable lnd-\* timers" <<<"$FREEZE_OUT" | cut -d: -f1)
-lnd_line=$(grep -n "Stop lnd.service\|Stop \$LND_SERVICE\|3\. Stop" <<<"$FREEZE_OUT" | cut -d: -f1 | head -1)
+# -m1 so each marker yields exactly one line number; without it a repeated
+# phrase produces a multi-line value and the numeric comparison below errors.
+first_line_of() { grep -n -m1 -- "$1" <<<"$2" | cut -d: -f1; }
+timers_line=$(first_line_of "Stop and disable lnd-" "$FREEZE_OUT")
+lnd_line=$(first_line_of "3. Stop" "$FREEZE_OUT")
 [ -n "$timers_line" ] && [ -n "$lnd_line" ] && [ "$timers_line" -lt "$lnd_line" ]
 check $? "timers are stopped BEFORE lnd (watchdog trap)"
 grep -q "wallet material" <<<"$FREEZE_OUT"; check $? "warns the archive holds wallet material"

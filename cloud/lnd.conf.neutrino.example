@@ -13,6 +13,11 @@
 # color=<your existing color>
 
 # Auto-unlock, same as the workstation.
+#
+# This path assumes lnd runs as a dedicated `lnd` user, which is what
+# cloud/MIGRATION.md sets up. Change it if you run as ubuntu, azureuser, or
+# anything else. lnd refuses to start when this file is missing, so a wrong
+# path fails loudly at boot rather than leaving the wallet quietly locked.
 wallet-unlock-password-file=/home/lnd/.lnd/wallet.pass
 
 # Watchtower client, matching the old --wtclient.active flag.
