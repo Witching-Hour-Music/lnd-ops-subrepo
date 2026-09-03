@@ -37,7 +37,7 @@ with `--dry-run` to log what it would do and call nothing.
 
 ```
 bin/                        scripts, shared by both roles
-cloud/                      Azure migration runbook and neutrino config
+cloud/                      cost-aware migration runbook, checklist and configs
 lib/common.sh               config resolution and helpers
 config/lnd-ops.env.example  every tunable, with production defaults
 local/systemd/              unit set for the workstation
@@ -48,7 +48,8 @@ test/fixtures/lncli-stub    canned lncli responses
 
 ## Moving the node to another host
 
-See [`cloud/MIGRATION.md`](cloud/MIGRATION.md). The short version:
+Read [`cloud/MIGRATION.md`](cloud/MIGRATION.md), then execute the gated
+[`cloud/CUTOVER-CHECKLIST.md`](cloud/CUTOVER-CHECKLIST.md). The short version:
 
 ```bash
 bin/lnd-migrate-freeze.sh            # dry run, read the plan
@@ -62,6 +63,10 @@ timer before stopping lnd, because the watchdog otherwise restarts it within a
 minute, and it refuses to continue if the process or its RPC is still alive.
 `verify` checks the restored directory against the source checksums and
 confirms the identity-critical files arrived, `v3_onion_private_key` included.
+The selected plan uses Azure only to stage a stopped pruned Bitcoin Core data
+set, then moves LND directly from the workstation to the permanent VPS. Open
+LND channels cannot be imported into Core Lightning; that later transition
+requires closing LND channels and opening new CLN channels.
 
 ## Configuration
 
