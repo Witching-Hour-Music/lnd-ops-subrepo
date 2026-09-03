@@ -181,7 +181,10 @@ vrc=$?
 [ "$vrc" = 0 ]; check $? "passes on a complete data directory"
 grep -q "v3_onion_private_key present" <<<"$VERIFY_OUT"; check $? "detects the onion key"
 grep -q "bitcoin.node=bitcoind" <<<"$VERIFY_OUT"; check $? "reads the backend from lnd.conf"
-grep -q "edit lnd.conf before the first start" <<<"$VERIFY_OUT"; check $? "warns to switch backend before first start"
+grep -q "zmqpubrawblock and zmqpubrawtx match" <<<"$VERIFY_OUT"
+check $? "warns that both ZMQ endpoints must match bitcoin.conf"
+grep -q "makes a failure" <<<"$VERIFY_OUT"
+check $? "warns against changing backend and host together"
 
 # Losing the onion key changes the node address; must be called out.
 mv "$FAKE/.lnd/v3_onion_private_key" "$FAKE/.lnd/onion.bak"
@@ -202,6 +205,34 @@ check $? "passes with a matching manifest"
 echo corrupted > "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db"
 env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" --manifest "$SANDBOX/man.sha256" >/dev/null 2>&1
 [ $? -ne 0 ]; check $? "fails when a file does not match the manifest"
+echo
+
+echo "cloud configs"
+BC="$REPO/cloud/bitcoin.conf.example"
+LB="$REPO/cloud/lnd.conf.bitcoind.example"
+LN="$REPO/cloud/lnd.conf.neutrino.example"
+for f in "$BC" "$LB" "$LN" "$REPO/cloud/CUTOVER-CHECKLIST.md" "$REPO/cloud/MIGRATION.md"; do
+  [ -f "$f" ]; check $? "$(basename "$f") exists"
+done
+
+# LND needs both ZMQ endpoints, and they must agree across the two files.
+for ep in zmqpubrawblock zmqpubrawtx; do
+  bc=$(grep -E "^$ep=" "$BC" | cut -d= -f2-)
+  lnd=$(grep -E "^bitcoind\.$ep=" "$LB" | cut -d= -f2-)
+  [ -n "$bc" ] && [ "$bc" = "$lnd" ]
+  check $? "$ep matches between bitcoin.conf and lnd.conf (${bc:-unset} vs ${lnd:-unset})"
+done
+
+grep -q '^txindex=0' "$BC"; check $? "bitcoin.conf keeps txindex=0, required with pruning"
+grep -qE '^prune=[0-9]+' "$BC"; check $? "bitcoin.conf sets a prune target"
+prune=$(grep -oE '^prune=[0-9]+' "$BC" | cut -d= -f2)
+[ "${prune:-0}" -gt 550 ]; check $? "prune target is above the 550 minimum (got ${prune:-unset})"
+grep -q 'pruned-node-max-peers' "$LB"; check $? "bitcoind example sets pruned-node-max-peers"
+grep -q 'bitcoin.node=bitcoind' "$LB"; check $? "bitcoind example selects the bitcoind backend"
+grep -q 'bitcoin.node=neutrino' "$LN"; check $? "neutrino example selects the neutrino backend"
+grep -q 'v3_onion_private_key' "$LB"; check $? "bitcoind example flags the onion key dependency"
+# RPC must never be reachable from outside the host.
+grep -q '^rpcbind=127.0.0.1' "$BC"; check $? "bitcoin.conf binds RPC to localhost"
 echo
 
 echo "no hardcoded home directories"

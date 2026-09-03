@@ -8,7 +8,7 @@ Lightning node, network access, or systemd session is needed to run the tests.
 ## Quick start
 
 ```bash
-scripts/test.sh                            # 60 assertions against a stub node
+scripts/test.sh                            # 76 assertions against a stub node
 scripts/preflight.sh                       # what is configured, what is missing
 cp config/lnd-ops.env.example config/lnd-ops.env
 scripts/install.sh --role local --dry-run  # show what would be installed
@@ -37,7 +37,7 @@ with `--dry-run` to log what it would do and call nothing.
 
 ```
 bin/                        scripts, shared by both roles
-cloud/                      cost-aware migration runbook, checklist and configs
+cloud/                      migration runbook, gated checklist, backend configs
 lib/common.sh               config resolution and helpers
 config/lnd-ops.env.example  every tunable, with production defaults
 local/systemd/              unit set for the workstation
@@ -57,6 +57,14 @@ bin/lnd-migrate-freeze.sh --confirm  # stop timers, then lnd, then archive
 # scp the archive and manifest across
 bin/lnd-migrate-verify.sh --manifest ~/lnd-manifest.sha256
 ```
+
+Backend configuration references live alongside the runbook:
+
+| File | Used for |
+|---|---|
+| `cloud/bitcoin.conf.example` | pruned Bitcoin Core, staging and permanent host |
+| `cloud/lnd.conf.bitcoind.example` | the real cutover, pruned bitcoind backend |
+| `cloud/lnd.conf.neutrino.example` | the disposable rehearsal wallet only |
 
 Two copies of one wallet must never run at once. `freeze` stops every `lnd-*`
 timer before stopping lnd, because the watchdog otherwise restarts it within a

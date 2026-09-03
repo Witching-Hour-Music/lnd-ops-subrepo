@@ -7,7 +7,7 @@ workstation (`local`) and the phunkii node (`remote`).
 
 ```
 bin/                     the scripts, shared by both roles
-cloud/                   Azure migration runbook and neutrino lnd.conf
+cloud/                   migration runbook, gated cutover checklist, configs
 lib/common.sh            config resolution and helpers, sourced by every script
 config/lnd-ops.env.example  every tunable, with the production defaults
 local/systemd/           unit set for the workstation
@@ -24,7 +24,7 @@ copies of the same four scripts that differed only in hardcoded paths.
 ## Commands
 
 ```
-scripts/test.sh                      # 60 assertions, needs no node or network
+scripts/test.sh                      # 76 assertions, needs no node or network
 scripts/preflight.sh                 # what is configured, what is missing
 scripts/install.sh --role local --dry-run
 scripts/install.sh --role local --enable

@@ -101,7 +101,14 @@ if [ -f "$CONF" ]; then
     pass "lnd.conf declares bitcoin.node=$backend"
     if [ "$backend" = "bitcoind" ]; then
       warn "this host must be able to reach that bitcoind, or lnd will not start"
-      warn "switching to neutrino? edit lnd.conf before the first start, not after"
+      warn "check bitcoind.rpchost and BOTH zmqpubrawblock and zmqpubrawtx match"
+      warn "bitcoin.conf exactly, or lnd starts but never sees a new block"
+      if grep -qE '^\s*prune\s*=' "$CONF" 2>/dev/null; then
+        warn "pruned backend: set bitcoind.pruned-node-max-peers (see"
+        warn "cloud/lnd.conf.bitcoind.example)"
+      fi
+      warn "changing backend at the same time as the host makes a failure"
+      warn "ambiguous; see cloud/CUTOVER-CHECKLIST.md"
     fi
   else
     warn "lnd.conf does not set bitcoin.node"

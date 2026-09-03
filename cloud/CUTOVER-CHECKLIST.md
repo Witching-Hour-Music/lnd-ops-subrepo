@@ -67,8 +67,14 @@ Erasing the EOS FAM VM is destructive and was approved for this plan.
 - [ ] Create an unprivileged Bitcoin service user.
 - [ ] Install the exact Bitcoin Core version intended for the permanent VPS.
 - [ ] Configure pruning small enough to fit the permanent 80 GiB disk, with
-      room for chainstate, logs, LND/CLN data and upgrades.
-- [ ] Keep `txindex=0`; configure the ZMQ endpoints required by LND.
+      room for chainstate, logs, LND/CLN data and upgrades. See
+      `cloud/bitcoin.conf.example`: `prune=20000` lands near 45 GB total once
+      the ~11 GB 2026 chainstate and LND are counted. Do not use the
+      `prune=550` minimum, because LND refetches discarded blocks from P2P
+      peers and that is slower again over Tor.
+- [ ] Keep `txindex=0`; configure the ZMQ endpoints required by LND. Both
+      `zmqpubrawblock` and `zmqpubrawtx` must match `lnd.conf` exactly, or LND
+      never sees new blocks.
 - [ ] Start Bitcoin Core and complete initial block download.
 
 Azure never receives `~/.lnd`, the LND seed, wallet password, macaroons,
@@ -108,6 +114,9 @@ the restored production directory.
 
 - [ ] Install exactly LND v0.20.1-beta.
 - [ ] Confirm it can use the permanent Bitcoin Core RPC and ZMQ endpoints.
+- [ ] Confirm the disposable node reaches `synced_to_chain` against the pruned
+      backend, which proves block refetching works before real funds depend
+      on it.
 - [ ] Confirm Tor starts and produces an onion service.
 - [ ] Confirm systemd starts, stops and leaves the disposable node stopped.
 - [ ] Delete the disposable wallet/data and verify the production LND
@@ -137,7 +146,9 @@ the restored production directory.
 - [ ] Extract as the dedicated LND user.
 - [ ] Set directories to owner-only and verify all ownership.
 - [ ] Restore the original Tor onion private key.
-- [ ] Configure LND for the already-proven local Bitcoin Core RPC/ZMQ backend.
+- [ ] Configure LND for the already-proven local Bitcoin Core RPC/ZMQ backend,
+      using `cloud/lnd.conf.bitcoind.example` as the reference. Set
+      `bitcoind.pruned-node-max-peers` since the backend is pruned.
 - [ ] Do not change LND version, database backend, chain backend or Lightning
       implementation during this move.
 - [ ] Run `bin/lnd-migrate-verify.sh --manifest ...` and resolve every
