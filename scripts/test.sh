@@ -211,7 +211,8 @@ echo "cloud configs"
 BC="$REPO/cloud/bitcoin.conf.example"
 LB="$REPO/cloud/lnd.conf.bitcoind.example"
 LN="$REPO/cloud/lnd.conf.neutrino.example"
-for f in "$BC" "$LB" "$LN" "$REPO/cloud/CUTOVER-CHECKLIST.md" "$REPO/cloud/MIGRATION.md"; do
+for f in "$BC" "$LB" "$LN" "$REPO/cloud/CUTOVER-CHECKLIST.md" "$REPO/cloud/MIGRATION.md" \
+         "$REPO/cloud/FAST-PATH.md"; do
   [ -f "$f" ]; check $? "$(basename "$f") exists"
 done
 
@@ -233,6 +234,17 @@ grep -q 'bitcoin.node=neutrino' "$LN"; check $? "neutrino example selects the ne
 grep -q 'v3_onion_private_key' "$LB"; check $? "bitcoind example flags the onion key dependency"
 # RPC must never be reachable from outside the host.
 grep -q '^rpcbind=127.0.0.1' "$BC"; check $? "bitcoin.conf binds RPC to localhost"
+
+FP="$REPO/cloud/FAST-PATH.md"
+grep -q 'v0.20.1-beta' "$FP"; check $? "fast path pins the LND version"
+grep -q 'ROLLBACK BOUNDARY' "$FP"; check $? "fast path marks the rollback boundary"
+grep -q 'v3_onion_private_key' "$FP"; check $? "fast path flags the onion key"
+grep -q -- '--confirm' "$FP"; check $? "fast path uses the opt-in freeze flag"
+# dbcache is raised for the sync and must be lowered again before LND starts.
+grep -q 'dbcache=1500' "$FP"; check $? "fast path raises dbcache for the sync"
+grep -q 'dbcache=450' "$FP"; check $? "fast path lowers dbcache again before LND"
+bc_cache=$(grep -oE '^dbcache=[0-9]+' "$BC" | cut -d= -f2)
+[ "${bc_cache:-0}" = 450 ]; check $? "bitcoin.conf steady-state dbcache matches (got ${bc_cache:-unset})"
 echo
 
 echo "no hardcoded home directories"

@@ -14,6 +14,10 @@ Target architecture:
 Mark every box. A failed **STOP** gate ends the attempt; do not improvise around
 it while channel funds are at risk.
 
+For the shortest route, see [`FAST-PATH.md`](FAST-PATH.md), which drops the
+Azure staging tier and runs the initial sync directly on the permanent VPS.
+It skips sections 2, 3, 9 and 10 below.
+
 ## 0. Record the decisions
 
 - [ ] Permanent VPS provider, region, plan and operator are recorded.

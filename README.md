@@ -48,8 +48,10 @@ test/fixtures/lncli-stub    canned lncli responses
 
 ## Moving the node to another host
 
-Read [`cloud/MIGRATION.md`](cloud/MIGRATION.md), then execute the gated
-[`cloud/CUTOVER-CHECKLIST.md`](cloud/CUTOVER-CHECKLIST.md). The short version:
+For the shortest route, [`cloud/FAST-PATH.md`](cloud/FAST-PATH.md): one host,
+no staging tier, three sittings. For the thorough staged version, read
+[`cloud/MIGRATION.md`](cloud/MIGRATION.md) then execute the gated
+[`cloud/CUTOVER-CHECKLIST.md`](cloud/CUTOVER-CHECKLIST.md). Either way:
 
 ```bash
 bin/lnd-migrate-freeze.sh            # dry run, read the plan
