@@ -1,0 +1,68 @@
+# lnd.conf for the permanent VPS, pruned bitcoind backend.
+#
+# This is the configuration the cutover actually uses. The neutrino example
+# alongside it is for the disposable rehearsal wallet only; an established
+# production wallet is not switched to neutrino during a host move.
+#
+# Copy the ORIGINAL lnd.conf across with the rest of ~/.lnd, then change only
+# the backend connection details below to point at the VPS's local Bitcoin
+# Core. Do not change the LND version, the database backend, or the Lightning
+# implementation in the same operation.
+
+[Application Options]
+# Keep the alias and colour so the node looks unchanged to peers.
+# alias=<your existing alias>
+# color=<your existing color>
+
+# Auto-unlock, same as the workstation.
+#
+# This path assumes lnd runs as a dedicated `lnd` user. Change it if you run
+# as ubuntu, azureuser, or anything else. lnd refuses to start when this file
+# is missing, so a wrong path fails loudly at boot rather than leaving the
+# wallet quietly locked.
+wallet-unlock-password-file=/home/lnd/.lnd/wallet.pass
+
+# Watchtower client, matching the workstation's --wtclient.active flag.
+wtclient.active=true
+
+# Inbound arrives over the Tor hidden service, so nothing needs opening in the
+# provider firewall.
+listen=localhost:9735
+rpclisten=localhost:10009
+restlisten=localhost:8080
+
+[Bitcoin]
+bitcoin.mainnet=true
+bitcoin.node=bitcoind
+
+[Bitcoind]
+bitcoind.rpchost=127.0.0.1:8332
+# Prefer cookie auth over a password in this file. Point it at the datadir of
+# the bitcoind service account.
+#bitcoind.rpccookie=/var/lib/bitcoind/.cookie
+#bitcoind.rpcuser=
+#bitcoind.rpcpass=
+
+# Must match the zmqpub* endpoints in bitcoin.conf exactly. LND will not see
+# new blocks without these.
+bitcoind.zmqpubrawblock=tcp://127.0.0.1:28332
+bitcoind.zmqpubrawtx=tcp://127.0.0.1:28333
+
+# Pruned backends only. LND fetches blocks the backend has discarded from
+# Bitcoin P2P peers, and this caps how many it will pull from at once.
+# Default is 4.
+bitcoind.pruned-node-max-peers=4
+
+[tor]
+# Preserves the node's onion identity, provided v3_onion_private_key came
+# across in ~/.lnd. If that file is missing the address changes and peers
+# cannot find the node.
+#
+# Note the interaction with pruning: blocks the backend no longer has are
+# fetched over the P2P network, and with Tor active that traffic is routed
+# through Tor and is slower. This is a reason not to prune aggressively.
+tor.active=true
+tor.v3=true
+tor.streamisolation=true
+tor.socks=127.0.0.1:9050
+tor.control=127.0.0.1:9051

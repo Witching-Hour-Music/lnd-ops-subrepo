@@ -144,6 +144,109 @@ got="$(LND_ROLE=local bash -c '. "'"$REPO"'/lib/common.sh"; echo "$LND_MIN_ACTIV
 [ "$got" = "2" ]; check $? "local role defaults to 2 active channels (got $got)"
 echo
 
+echo "migration freeze (dry run)"
+FAKE="$SANDBOX/fakelnd"
+mkdir -p "$FAKE/.lnd/data/chain/bitcoin/mainnet"
+echo wallet   > "$FAKE/.lnd/data/chain/bitcoin/mainnet/wallet.db"
+echo channels > "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db"
+echo scb      > "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.backup"
+echo cert     > "$FAKE/.lnd/tls.cert"
+echo key      > "$FAKE/.lnd/tls.key"
+echo onion    > "$FAKE/.lnd/v3_onion_private_key"
+printf 'bitcoin.node=bitcoind\n' > "$FAKE/.lnd/lnd.conf"
+
+FREEZE_OUT="$(env HOME="$FAKE" LND_DIR="$FAKE/.lnd" OUT_DIR="$SANDBOX/mig" \
+  "$REPO/bin/lnd-migrate-freeze.sh" 2>&1)"; check $? "dry run exits clean"
+grep -q "mode:     dry run" <<<"$FREEZE_OUT"; check $? "announces dry-run mode"
+grep -q "Nothing changed" <<<"$FREEZE_OUT"; check $? "states nothing changed"
+[ ! -d "$SANDBOX/mig" ]; check $? "dry run creates no output directory"
+
+# The ordering trap: timers must be disabled before lnd is stopped, or the
+# watchdog restarts it underneath the copy.
+# -m1 so each marker yields exactly one line number; without it a repeated
+# phrase produces a multi-line value and the numeric comparison below errors.
+first_line_of() { grep -n -m1 -- "$1" <<<"$2" | cut -d: -f1; }
+timers_line=$(first_line_of "Stop and disable lnd-" "$FREEZE_OUT")
+lnd_line=$(first_line_of "3. Stop" "$FREEZE_OUT")
+[ -n "$timers_line" ] && [ -n "$lnd_line" ] && [ "$timers_line" -lt "$lnd_line" ]
+check $? "timers are stopped BEFORE lnd (watchdog trap)"
+grep -q "wallet material" <<<"$FREEZE_OUT"; check $? "warns the archive holds wallet material"
+grep -q "Nothing has been stopped" <<<"$FREEZE_OUT"; check $? "dry run does not claim the node was stopped"
+grep -q "stale channel state" <<<"$FREEZE_OUT"; check $? "warns against restarting the source"
+echo
+
+echo "migration verify"
+VERIFY_OUT="$(env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" 2>&1)"
+vrc=$?
+[ "$vrc" = 0 ]; check $? "passes on a complete data directory"
+grep -q "v3_onion_private_key present" <<<"$VERIFY_OUT"; check $? "detects the onion key"
+grep -q "bitcoin.node=bitcoind" <<<"$VERIFY_OUT"; check $? "reads the backend from lnd.conf"
+grep -q "zmqpubrawblock and zmqpubrawtx match" <<<"$VERIFY_OUT"
+check $? "warns that both ZMQ endpoints must match bitcoin.conf"
+grep -q "makes a failure" <<<"$VERIFY_OUT"
+check $? "warns against changing backend and host together"
+
+# Losing the onion key changes the node address; must be called out.
+mv "$FAKE/.lnd/v3_onion_private_key" "$FAKE/.lnd/onion.bak"
+VERIFY_OUT="$(env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" 2>&1)"
+grep -q "its address will change" <<<"$VERIFY_OUT"; check $? "warns when the onion key is missing"
+mv "$FAKE/.lnd/onion.bak" "$FAKE/.lnd/v3_onion_private_key"
+
+# A missing channel.db is fatal, not a warning.
+mv "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db" "$FAKE/.lnd/chan.bak"
+env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "fails when channel.db is missing"
+mv "$FAKE/.lnd/chan.bak" "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db"
+
+# Checksum mismatch must be caught, not waved through.
+( cd "$FAKE/.lnd" && find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$SANDBOX/man.sha256"
+env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" --manifest "$SANDBOX/man.sha256" >/dev/null 2>&1
+check $? "passes with a matching manifest"
+echo corrupted > "$FAKE/.lnd/data/chain/bitcoin/mainnet/channel.db"
+env HOME="$FAKE" LND_DIR="$FAKE/.lnd" "$REPO/bin/lnd-migrate-verify.sh" --manifest "$SANDBOX/man.sha256" >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "fails when a file does not match the manifest"
+echo
+
+echo "cloud configs"
+BC="$REPO/cloud/bitcoin.conf.example"
+LB="$REPO/cloud/lnd.conf.bitcoind.example"
+LN="$REPO/cloud/lnd.conf.neutrino.example"
+for f in "$BC" "$LB" "$LN" "$REPO/cloud/CUTOVER-CHECKLIST.md" "$REPO/cloud/MIGRATION.md" \
+         "$REPO/cloud/FAST-PATH.md"; do
+  [ -f "$f" ]; check $? "$(basename "$f") exists"
+done
+
+# LND needs both ZMQ endpoints, and they must agree across the two files.
+for ep in zmqpubrawblock zmqpubrawtx; do
+  bc=$(grep -E "^$ep=" "$BC" | cut -d= -f2-)
+  lnd=$(grep -E "^bitcoind\.$ep=" "$LB" | cut -d= -f2-)
+  [ -n "$bc" ] && [ "$bc" = "$lnd" ]
+  check $? "$ep matches between bitcoin.conf and lnd.conf (${bc:-unset} vs ${lnd:-unset})"
+done
+
+grep -q '^txindex=0' "$BC"; check $? "bitcoin.conf keeps txindex=0, required with pruning"
+grep -qE '^prune=[0-9]+' "$BC"; check $? "bitcoin.conf sets a prune target"
+prune=$(grep -oE '^prune=[0-9]+' "$BC" | cut -d= -f2)
+[ "${prune:-0}" -gt 550 ]; check $? "prune target is above the 550 minimum (got ${prune:-unset})"
+grep -q 'pruned-node-max-peers' "$LB"; check $? "bitcoind example sets pruned-node-max-peers"
+grep -q 'bitcoin.node=bitcoind' "$LB"; check $? "bitcoind example selects the bitcoind backend"
+grep -q 'bitcoin.node=neutrino' "$LN"; check $? "neutrino example selects the neutrino backend"
+grep -q 'v3_onion_private_key' "$LB"; check $? "bitcoind example flags the onion key dependency"
+# RPC must never be reachable from outside the host.
+grep -q '^rpcbind=127.0.0.1' "$BC"; check $? "bitcoin.conf binds RPC to localhost"
+
+FP="$REPO/cloud/FAST-PATH.md"
+grep -q 'v0.20.1-beta' "$FP"; check $? "fast path pins the LND version"
+grep -q 'ROLLBACK BOUNDARY' "$FP"; check $? "fast path marks the rollback boundary"
+grep -q 'v3_onion_private_key' "$FP"; check $? "fast path flags the onion key"
+grep -q -- '--confirm' "$FP"; check $? "fast path uses the opt-in freeze flag"
+# dbcache is raised for the sync and must be lowered again before LND starts.
+grep -q 'dbcache=1500' "$FP"; check $? "fast path raises dbcache for the sync"
+grep -q 'dbcache=450' "$FP"; check $? "fast path lowers dbcache again before LND"
+bc_cache=$(grep -oE '^dbcache=[0-9]+' "$BC" | cut -d= -f2)
+[ "${bc_cache:-0}" = 450 ]; check $? "bitcoin.conf steady-state dbcache matches (got ${bc_cache:-unset})"
+echo
+
 echo "no hardcoded home directories"
 # The only permitted absolute home path is the remote node's lncli, which is
 # a default for a *different* machine and lives in LND_REMOTE_LNCLI.

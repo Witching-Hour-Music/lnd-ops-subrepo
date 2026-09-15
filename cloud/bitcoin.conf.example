@@ -1,0 +1,48 @@
+# bitcoin.conf for both the Azure staging host and the permanent VPS.
+#
+# Use the SAME file on both. The checklist requires the staged and permanent
+# hosts to run the identical Bitcoin Core version and pruning setting, because
+# the permanent host receives the staged chain data directly.
+
+server=1
+daemon=1
+mainnet=1
+
+# --- Pruning -----------------------------------------------------------------
+# Sizing for the 80 GiB permanent VPS, as of 2026:
+#
+#   chainstate (UTXO set)   ~11 GB, and growing every month
+#   pruned blocks           whatever `prune` allows, below
+#   LND (channel.db, graph) ~2-5 GB
+#   OS and everything else  ~10 GB
+#
+# prune=20000 gives roughly 20 GB of blocks, landing near 45 GB total and
+# leaving real headroom for chainstate growth and a future reindex.
+#
+# Do not drop to the prune=550 minimum. LND refetches discarded blocks from
+# Bitcoin P2P peers, so aggressive pruning costs performance, and with Tor
+# active that refetching is slower still.
+prune=20000
+
+# Incompatible with pruning, and LND does not need it.
+txindex=0
+
+# --- RPC ---------------------------------------------------------------------
+# Cookie auth by default. Never bind RPC to a public interface.
+rpcbind=127.0.0.1
+rpcallowip=127.0.0.1
+#rpcuser=
+#rpcpassword=
+
+# --- ZMQ ---------------------------------------------------------------------
+# LND requires both. These must match bitcoind.zmqpubrawblock and
+# bitcoind.zmqpubrawtx in lnd.conf exactly, or LND never sees new blocks.
+zmqpubrawblock=tcp://127.0.0.1:28332
+zmqpubrawtx=tcp://127.0.0.1:28333
+
+# --- Resources ---------------------------------------------------------------
+# Reasonable for a 4 GiB host shared with LND. Raise dbcache only for the
+# staging host during initial block download, where it speeds sync noticeably,
+# then lower it again before copying the chain data.
+dbcache=450
+maxmempool=100

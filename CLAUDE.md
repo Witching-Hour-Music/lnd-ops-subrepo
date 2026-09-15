@@ -7,6 +7,7 @@ workstation (`local`) and the phunkii node (`remote`).
 
 ```
 bin/                     the scripts, shared by both roles
+cloud/                   migration runbook, gated cutover checklist, configs
 lib/common.sh            config resolution and helpers, sourced by every script
 config/lnd-ops.env.example  every tunable, with the production defaults
 local/systemd/           unit set for the workstation
@@ -23,7 +24,7 @@ copies of the same four scripts that differed only in hardcoded paths.
 ## Commands
 
 ```
-scripts/test.sh                      # 42 assertions, needs no node or network
+scripts/test.sh                      # 76 assertions, needs no node or network
 scripts/preflight.sh                 # what is configured, what is missing
 scripts/install.sh --role local --dry-run
 scripts/install.sh --role local --enable
@@ -45,6 +46,13 @@ change on the machine they were written for.
 
 ## Wallet and transaction safety
 
+- `bin/lnd-migrate-freeze.sh` stops a live node. It is dry-run by default and
+  needs `--confirm` to act. It aborts rather than continue if lnd is still
+  running after the stop, because copying a live data directory produces a
+  corrupt channel database.
+- Never run two copies of one wallet. After a migrated node connects to peers,
+  the source host is retired permanently; restarting it publishes stale
+  channel state that peers can penalise.
 - `bin/lnd-fee-autotune.sh` is the only script here that changes node state.
   Everything else is read-only apart from the watchdog's service restarts and
   peer reconnects. Validate with `--dry-run` before `--apply`.
