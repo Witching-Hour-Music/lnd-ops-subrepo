@@ -42,7 +42,9 @@ babysitting.
 Nothing here touches the workstation. It keeps running normally.
 
 1. Create the VPS: 2 vCPU, 4 GiB, 80 GiB, Ubuntu LTS, SSH key only, password
-   and root login disabled.
+   and root login disabled. On DigitalOcean that is the Basic (shared CPU)
+   droplet `s-2vcpu-4gb` at USD 24/month — see **Sizing the host** below
+   before picking anything smaller.
 2. Firewall: SSH from your IP only. Nothing else. Inbound Lightning arrives
    over Tor, so `9735` stays shut.
 3. Set a provider budget alert before anything else runs.
@@ -58,6 +60,44 @@ Nothing here touches the workstation. It keeps running normally.
 8. Start bitcoind.
 
 Then leave it. Expect somewhere between half a day and a day and a half.
+
+---
+
+## Sizing the host
+
+The permanent host is specified as 2 vCPU, 4 GiB RAM, 80 GiB disk. On
+DigitalOcean that is exactly one Basic droplet, `s-2vcpu-4gb`, USD 24/month.
+Its 4,000 GiB transfer allowance is far more than an initial block download
+needs.
+
+Both the disk and the memory figure are floors, not preferences. A smaller
+droplet fails, and fails in a way that is expensive to discover late: after
+the sync has run.
+
+**Disk.** With `prune=20000` the block store is capped near 20 GB, but that is
+not the whole footprint. The 2026 chainstate is roughly 11 GB and is *not*
+pruned, and LND, Tor, the OS and the freeze archive all want room beside it.
+The total lands near 45 GB. 80 GiB is the smallest Basic droplet that clears
+it with headroom for chainstate growth; a 30 GiB disk does not fit the
+chainstate and the prune target together, let alone the OS.
+
+**Memory.** LND alone wants roughly 400-800 MB resident. bitcoind wants its
+`dbcache` on top, and this runbook deliberately raises `dbcache` to 1500
+during the sync because it is the largest lever on download time. On a 1 GiB
+droplet there is no configuration of those two that fits, and the failure mode
+is the OOM killer taking bitcoind or lnd mid-operation.
+
+So a 1 vCPU / 1 GiB droplet is not a cheaper version of this plan. It fails on
+disk and on memory independently, and neither is recoverable by tuning.
+
+**If a bigger droplet is affordable**, the money buys sync time rather than
+safety: more vCPU and more RAM for `dbcache` shorten sitting 1. Nothing in
+this plan requires it, and the steady-state node runs comfortably on
+`s-2vcpu-4gb` once `dbcache` goes back to 450.
+
+**Resizing later.** DigitalOcean can raise CPU and RAM on a Basic droplet
+without touching the disk, and that is reversible. Growing the disk is not
+reversible on a droplet. Start at 80 GiB rather than planning to expand.
 
 ## Sitting 2 — prove the backend, rehearse (~30 min)
 
