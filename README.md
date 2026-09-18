@@ -56,7 +56,7 @@ before adding a monitoring, backup, networking or integration dependency.
 Run the read-only audit on the cloud host before making changes:
 
 ```bash
-scripts/cloud-audit.sh
+bash scripts/cloud-audit.sh
 ```
 
 It checks host headroom, service visibility, LND sync/peers/channels, listening
