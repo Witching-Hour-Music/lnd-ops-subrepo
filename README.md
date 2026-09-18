@@ -46,6 +46,23 @@ scripts/                    install, preflight, test
 test/fixtures/lncli-stub    canned lncli responses
 ```
 
+## Production cloud operations
+
+The production node now runs on DigitalOcean. The paid Droplet is the only
+paid infrastructure assumed by the operations plan; supporting components are
+free/open-source and self-hosted. Read [the FOSS cloud plan](cloud/FOSS-CLOUD-PLAN.md)
+before adding a monitoring, backup, networking or integration dependency.
+
+Run the read-only audit on the cloud host before making changes:
+
+```bash
+scripts/cloud-audit.sh
+```
+
+It checks host headroom, service visibility, LND sync/peers/channels, listening
+sockets and static-channel-backup freshness. It never restarts a service or
+calls a state-changing Lightning RPC.
+
 ## Moving the node to another host
 
 For the shortest route, [`cloud/FAST-PATH.md`](cloud/FAST-PATH.md): one host,
