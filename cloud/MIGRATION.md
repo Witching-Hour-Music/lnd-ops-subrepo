@@ -10,7 +10,7 @@ architecture is staged this way.
 |---|---|---|---|
 | Current authority | local workstation | until cutover | existing LND wallet and two channels |
 | Sync accelerator | rebuilt Azure `Standard_D2s_v4` on Ubuntu | temporary | **none** |
-| Permanent node | 2 vCPU / 4 GiB / 80 GiB Ubuntu VPS, about USD 24/month | ongoing | LND, then a separate CLN wallet later |
+| Permanent node | 2 vCPU / 4 GiB / 80 GiB Ubuntu VPS, about USD 24/month (DigitalOcean Basic `s-2vcpu-4gb`) | ongoing | LND, then a separate CLN wallet later |
 
 Azure is used only to synchronize a pruned Bitcoin Core data directory more
 quickly. Bitcoin Core is stopped cleanly before that chain data is checksummed
