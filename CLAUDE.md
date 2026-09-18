@@ -24,7 +24,7 @@ copies of the same four scripts that differed only in hardcoded paths.
 ## Commands
 
 ```
-scripts/test.sh                      # 76 assertions, needs no node or network
+scripts/test.sh                      # the full suite, needs no node or network
 scripts/preflight.sh                 # what is configured, what is missing
 scripts/install.sh --role local --dry-run
 scripts/install.sh --role local --enable

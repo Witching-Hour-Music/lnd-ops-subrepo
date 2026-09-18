@@ -8,7 +8,7 @@ Lightning node, network access, or systemd session is needed to run the tests.
 ## Quick start
 
 ```bash
-scripts/test.sh                            # 76 assertions against a stub node
+scripts/test.sh                            # the full suite, against a stub node
 scripts/preflight.sh                       # what is configured, what is missing
 cp config/lnd-ops.env.example config/lnd-ops.env
 scripts/install.sh --role local --dry-run  # show what would be installed

@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review changes to this repository. Use for any pull request or diff touching bin/, lib/, scripts/, systemd units, or config — and for any change that could affect a running Lightning node.
+description: Review changes to this repository. Use for any pull request or diff touching bin/, lib/, cloud/, scripts/, systemd units, or config — and for any change that could affect a running Lightning node.
 ---
 
 # Reviewing lnd-ops-subrepo
@@ -44,9 +44,15 @@ lnd restarts within a minute of being stopped.
 
 Anything that stops lnd must stop and disable the `lnd-*` timers **first**.
 Stopping lnd alone gets it restarted underneath whatever came next, and a data
-directory copied from a running node has a corrupt `channel.db`. If a diff
-reorders those steps, or stops lnd without touching the timers, that is
-blocking regardless of how clean the code looks.
+directory copied from a running node has a corrupt `channel.db`.
+
+`bin/lnd-migrate-freeze.sh` implements this: step 2 stops and disables every
+`lnd-*` timer, step 3 stops `$LND_SERVICE`. That order is load-bearing and the
+test suite asserts it. If a diff reorders those steps, or stops lnd without
+touching the timers, that is blocking regardless of how clean the code looks.
+
+`freeze` also refuses to continue if the process or its RPC survives the stop,
+rather than proceeding to copy a live data directory. Keep that refusal.
 
 ## Things that have actually gone wrong here
 
@@ -65,9 +71,10 @@ These shapes are real findings from this repository, not hypotheticals:
   not set them — a sourced file that turns on `set -e` changes its caller's
   control flow. Each executable sets its own. A diff adding `set` to the
   library is blocking.
-- **Dry runs that claim to have acted.** A dry run once printed that a node had
-  been stopped while touching nothing. Every message a dry run prints must be
-  true of a dry run.
+- **Dry runs that claim to have acted.** `freeze` once printed that the node on
+  this host was stopped, on a run that touched nothing. Every message a dry run
+  prints must be true of a dry run; the suite asserts a dry run creates no
+  output file and makes no such claim.
 - **Assertions left behind after a rewording.** A test kept checking a string
   that had been removed and passed for the wrong reason. When output text
   changes, grep the suite for the old string.
@@ -95,17 +102,36 @@ The real `config/lnd-ops.env` is untracked; host-specific values belong there.
 Some mismatches produce a node that starts cleanly, reports healthy, and is
 silently broken. Review these as pairs, never individually:
 
-- **Both ZMQ endpoints**, wherever a Bitcoin Core config and an lnd config ship
-  together. A mismatch gives a node that never sees a new block.
+- **Both ZMQ endpoints**, between `cloud/bitcoin.conf.example` and
+  `cloud/lnd.conf.bitcoind.example`. A mismatch gives a node that starts
+  cleanly, reports healthy, and never sees a new block. A test asserts the two
+  shipped configs agree on `zmqpubrawblock` and `zmqpubrawtx`; keep it passing.
 - **The LND version**, between hosts in any move. A newer lnd migrates
   `channel.db` on first start and that is not reversible.
 - **`prune` and disk sizing**, between config and runbook. LND refetches
-  discarded blocks from peers and Tor makes that slower, so a minimal
-  `prune=550` is the wrong choice here.
+  discarded blocks from peers and Tor makes that slower, so `prune=550` is the
+  wrong choice here; `prune=20000` lands near 45 GB once the chainstate and LND
+  are counted.
+- **`dbcache` figures**, between `cloud/FAST-PATH.md` and the shipped
+  `cloud/bitcoin.conf.example`. It is raised during sync while LND is not yet
+  running, then returned before it starts. A test asserts the two agree.
 
-If a change adds migration or cutover tooling, `v3_onion_private_key` must
-survive the move or the onion address changes and peers cannot reach the node.
-Archives holding wallet material move over scp only.
+## Migration and cutover
+
+`bin/lnd-migrate-freeze.sh` quiesces the source host and archives `~/.lnd`. It
+is dry-run by default and needs `--confirm` to act. `bin/lnd-migrate-verify.sh`
+checks a restored directory before lnd is started.
+
+- `v3_onion_private_key` must survive the move or the onion address changes and
+  peers cannot reach the node. `verify` passes when it is present and warns when
+  it is absent; keep both branches working.
+- Archives hold wallet material and move over scp only.
+- `cloud/FAST-PATH.md` is the one-host route; `cloud/CUTOVER-CHECKLIST.md` is
+  the staged one. Both share the same freeze, verify and rollback boundary. A
+  change to one that alters a shared gate needs the same change in the other.
+- The rollback boundary is the point after which the source host can no longer
+  be restarted. A diff that moves it, or that removes the warning marking it,
+  is blocking.
 
 ## What to report, and how
 
