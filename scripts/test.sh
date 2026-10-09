@@ -248,15 +248,16 @@ bc_cache=$(grep -oE '^dbcache=[0-9]+' "$BC" | cut -d= -f2)
 echo
 
 echo "no hardcoded home directories"
-# The only permitted absolute home path is the remote node's lncli, which is
-# a default for a *different* machine and lives in LND_REMOTE_LNCLI.
+# No absolute home path is permitted anywhere. The remote node's lncli used to
+# be exempt; it is a placeholder now, so the exemption is gone and a real path
+# cannot creep back in under that name.
 SCAN=$(grep -rn '/home/fletchervaughn' "$REPO/bin" "$REPO/lib" "$REPO/scripts" \
         "$REPO/local" "$REPO/remote-phunkii" "$REPO/config" 2>/dev/null | grep -v 'scripts/test\.sh')
 [ -z "$SCAN" ]; check $? "no /home/fletchervaughn anywhere${SCAN:+ (found: $SCAN)}"
 SCAN=$(grep -rn '/home/phunkii' "$REPO/bin" "$REPO/lib" "$REPO/scripts" \
-        "$REPO/local" "$REPO/remote-phunkii" 2>/dev/null \
-        | grep -v 'scripts/test\.sh' | grep -v 'LND_REMOTE_LNCLI')
-[ -z "$SCAN" ]; check $? "no /home/phunkii outside LND_REMOTE_LNCLI${SCAN:+ (found: $SCAN)}"
+        "$REPO/local" "$REPO/remote-phunkii" "$REPO/config" 2>/dev/null \
+        | grep -v 'scripts/test\.sh')
+[ -z "$SCAN" ]; check $? "no /home/phunkii anywhere${SCAN:+ (found: $SCAN)}"
 echo
 
 echo "installer"

@@ -70,9 +70,10 @@ change on the machine they were written for.
   it at `$HOME/bin/flip_rebalance.sh`; the installer skips the unit when it is
   absent. It should be moved into `bin/` so the rebalancer is version
   controlled like everything else.
-- `config/lnd-ops.env.example` carries the phunkii host and its lncli path.
-  Both were already committed in the previous scripts, so this is not new
-  exposure, but they belong in the untracked `config/lnd-ops.env`.
+- The remote host and its lncli path are placeholders, in both
+  `config/lnd-ops.env.example` and `lib/common.sh`. This repository is public:
+  a `user@address` default is an SSH target published to every reader. Put the
+  real values in the untracked `config/lnd-ops.env` and never commit them.
 
 ## Never commit
 
