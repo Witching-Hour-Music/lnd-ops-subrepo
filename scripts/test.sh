@@ -265,7 +265,7 @@ echo "committed example ships no remote target"
 # a fresh install, so any non-empty LND_REMOTE_HOST here -- a real address or a
 # placeholder -- satisfies the guard in bin/lnd-fee-alert.sh and makes every run
 # ssh to it. The example must ship it empty.
-EXAMPLE_HOST=$(set -a; . "$REPO/config/lnd-ops.env.example"; set +a; printf '%s' "${LND_REMOTE_HOST:-}")
+EXAMPLE_HOST=$(sed -n 's/^[[:space:]]*LND_REMOTE_HOST=//p' "$REPO/config/lnd-ops.env.example" | head -n 1)
 [ -z "$EXAMPLE_HOST" ]; check $? "example leaves LND_REMOTE_HOST empty${EXAMPLE_HOST:+ (found: $EXAMPLE_HOST)}"
 SCAN=$(grep -nE '^[[:space:]]*LND_REMOTE_HOST=.*@' "$REPO/config/lnd-ops.env.example" "$REPO/lib/common.sh" 2>/dev/null)
 [ -z "$SCAN" ]; check $? "no user@address committed as a remote host${SCAN:+ (found: $SCAN)}"
