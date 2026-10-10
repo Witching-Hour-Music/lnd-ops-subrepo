@@ -260,6 +260,17 @@ SCAN=$(grep -rn '/home/phunkii' "$REPO/bin" "$REPO/lib" "$REPO/scripts" \
 [ -z "$SCAN" ]; check $? "no /home/phunkii anywhere${SCAN:+ (found: $SCAN)}"
 echo
 
+echo "committed example ships no remote target"
+# scripts/install.sh copies config/lnd-ops.env.example to config/lnd-ops.env on
+# a fresh install, so any non-empty LND_REMOTE_HOST here -- a real address or a
+# placeholder -- satisfies the guard in bin/lnd-fee-alert.sh and makes every run
+# ssh to it. The example must ship it empty.
+EXAMPLE_HOST=$(set -a; . "$REPO/config/lnd-ops.env.example"; set +a; printf '%s' "${LND_REMOTE_HOST:-}")
+[ -z "$EXAMPLE_HOST" ]; check $? "example leaves LND_REMOTE_HOST empty${EXAMPLE_HOST:+ (found: $EXAMPLE_HOST)}"
+SCAN=$(grep -nE '^[[:space:]]*LND_REMOTE_HOST=.*@' "$REPO/config/lnd-ops.env.example" "$REPO/lib/common.sh" 2>/dev/null)
+[ -z "$SCAN" ]; check $? "no user@address committed as a remote host${SCAN:+ (found: $SCAN)}"
+echo
+
 echo "installer"
 "$REPO/scripts/install.sh" --role local --dry-run >/dev/null 2>&1;  check $? "dry-run install (local) exits clean"
 "$REPO/scripts/install.sh" --role remote --dry-run >/dev/null 2>&1; check $? "dry-run install (remote) exits clean"
