@@ -129,8 +129,13 @@ LND_FEE_TIME_LOCK_DELTA="${LND_FEE_TIME_LOCK_DELTA:-40}"
 LND_FEE_APPLY="${LND_FEE_APPLY:-1}"
 
 # --- remote node ------------------------------------------------------------
-LND_REMOTE_HOST="${LND_REMOTE_HOST:-phunkii@20.127.136.37}"
-LND_REMOTE_LNCLI="${LND_REMOTE_LNCLI:-/home/phunkii/go/bin/lncli}"
+# No real host as a default: this repository is public, and a user@address
+# default is an SSH target published to anyone who reads it. Set both in the
+# untracked config/lnd-ops.env. bin/lnd-fee-alert.sh is the only consumer, and
+# it already tolerates an unreachable remote (|| true), so an unset remote
+# degrades to "no remote comparison" rather than failing.
+LND_REMOTE_HOST="${LND_REMOTE_HOST:-}"
+LND_REMOTE_LNCLI="${LND_REMOTE_LNCLI:-lncli}"
 LND_REMOTE_SSH_TIMEOUT="${LND_REMOTE_SSH_TIMEOUT:-6}"
 
 # --- helpers ----------------------------------------------------------------

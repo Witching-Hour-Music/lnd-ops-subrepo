@@ -19,8 +19,14 @@ local_json="$("$LNCLI" fwdinghistory --start_time "$start_24h" --max_events "$LN
 local_fee="$(jq -r "$SUM_FEES" <<<"$local_json")"
 local_fwd="$(jq -r "$COUNT_FWD" <<<"$local_json")"
 
-remote_json="$(ssh -o ConnectTimeout="$LND_REMOTE_SSH_TIMEOUT" "$LND_REMOTE_HOST" \
-  "$LND_REMOTE_LNCLI fwdinghistory --start_time $start_24h --max_events $LND_FWD_MAX_EVENTS" 2>/dev/null || true)"
+# LND_REMOTE_HOST has no default (see lib/common.sh): unset means no remote
+# node is configured, so skip the comparison instead of running ssh with an
+# empty host and relying on the error being swallowed.
+remote_json=""
+if [[ -n "$LND_REMOTE_HOST" ]]; then
+  remote_json="$(ssh -o ConnectTimeout="$LND_REMOTE_SSH_TIMEOUT" "$LND_REMOTE_HOST" \
+    "$LND_REMOTE_LNCLI fwdinghistory --start_time $start_24h --max_events $LND_FWD_MAX_EVENTS" 2>/dev/null || true)"
+fi
 if [[ -n "$remote_json" ]]; then
   remote_fee="$(jq -r "$SUM_FEES" <<<"$remote_json" 2>/dev/null || echo 0)"
   remote_fwd="$(jq -r "$COUNT_FWD" <<<"$remote_json" 2>/dev/null || echo 0)"

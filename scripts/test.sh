@@ -248,15 +248,36 @@ bc_cache=$(grep -oE '^dbcache=[0-9]+' "$BC" | cut -d= -f2)
 echo
 
 echo "no hardcoded home directories"
-# The only permitted absolute home path is the remote node's lncli, which is
-# a default for a *different* machine and lives in LND_REMOTE_LNCLI.
+# No absolute home path is permitted anywhere. The remote node's lncli used to
+# be exempt; it is a placeholder now, so the exemption is gone and a real path
+# cannot creep back in under that name.
 SCAN=$(grep -rn '/home/fletchervaughn' "$REPO/bin" "$REPO/lib" "$REPO/scripts" \
         "$REPO/local" "$REPO/remote-phunkii" "$REPO/config" 2>/dev/null | grep -v 'scripts/test\.sh')
 [ -z "$SCAN" ]; check $? "no /home/fletchervaughn anywhere${SCAN:+ (found: $SCAN)}"
 SCAN=$(grep -rn '/home/phunkii' "$REPO/bin" "$REPO/lib" "$REPO/scripts" \
-        "$REPO/local" "$REPO/remote-phunkii" 2>/dev/null \
-        | grep -v 'scripts/test\.sh' | grep -v 'LND_REMOTE_LNCLI')
-[ -z "$SCAN" ]; check $? "no /home/phunkii outside LND_REMOTE_LNCLI${SCAN:+ (found: $SCAN)}"
+        "$REPO/local" "$REPO/remote-phunkii" "$REPO/config" 2>/dev/null \
+        | grep -v 'scripts/test\.sh')
+[ -z "$SCAN" ]; check $? "no /home/phunkii anywhere${SCAN:+ (found: $SCAN)}"
+echo
+
+echo "committed example ships no remote target"
+# scripts/install.sh copies config/lnd-ops.env.example to config/lnd-ops.env on
+# a fresh install, so any non-empty LND_REMOTE_HOST here -- a real address or a
+# placeholder -- satisfies the guard in bin/lnd-fee-alert.sh and makes every run
+# ssh to it. The example must ship it empty.
+#
+# Read it rather than sourcing it, so the test never executes the file. Two
+# details matter and both are easy to get wrong:
+#   tail -n 1  the shell takes the LAST assignment, so a second uncommented
+#              LND_REMOTE_HOST lower in the file is the one that would win;
+#              taking the first would miss exactly the bug this guards against
+#   quotes     LND_REMOTE_HOST="" is two literal quote characters once the
+#              prefix is stripped, so unquoting is what makes "empty" mean empty
+EXAMPLE_HOST=$(sed -n 's/^[[:space:]]*LND_REMOTE_HOST=//p' "$REPO/config/lnd-ops.env.example" \
+  | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/")
+[ -z "$EXAMPLE_HOST" ]; check $? "example leaves LND_REMOTE_HOST empty${EXAMPLE_HOST:+ (found: $EXAMPLE_HOST)}"
+SCAN=$(grep -nE '^[[:space:]]*LND_REMOTE_HOST=.*@' "$REPO/config/lnd-ops.env.example" "$REPO/lib/common.sh" 2>/dev/null)
+[ -z "$SCAN" ]; check $? "no user@address committed as a remote host${SCAN:+ (found: $SCAN)}"
 echo
 
 echo "installer"

@@ -70,9 +70,14 @@ change on the machine they were written for.
   it at `$HOME/bin/flip_rebalance.sh`; the installer skips the unit when it is
   absent. It should be moved into `bin/` so the rebalancer is version
   controlled like everything else.
-- `config/lnd-ops.env.example` carries the phunkii host and its lncli path.
-  Both were already committed in the previous scripts, so this is not new
-  exposure, but they belong in the untracked `config/lnd-ops.env`.
+- The remote host has no default, in `lib/common.sh` or in
+  `config/lnd-ops.env.example`. This repository is public: a `user@address`
+  default is an SSH target published to every reader, and `scripts/install.sh`
+  copies the example into `config/lnd-ops.env`, so even a placeholder would be
+  non-empty and make `bin/lnd-fee-alert.sh` ssh to a host that does not exist.
+  Set `LND_REMOTE_HOST` in the untracked `config/lnd-ops.env` on the **local**
+  node (fee-alert runs there; the installer skips it for `--role remote`), and
+  never commit it.
 
 ## Never commit
 

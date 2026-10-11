@@ -149,6 +149,10 @@ committing regardless.
   controlled and `lnd-flip-rebalance.service` cannot start from a fresh
   checkout. Moving it into `bin/` would close the last home-directory
   dependency.
-- `config/lnd-ops.env.example` carries the phunkii host and its lncli path as
-  defaults. Both were already committed in the previous scripts, so this is
-  not new exposure, but they belong in the untracked `config/lnd-ops.env`.
+- ~~`config/lnd-ops.env.example` carries the remote host and its lncli path as
+  defaults.~~ Closed: the example ships them empty and `lib/common.sh` has no
+  address as a default. To enable the remote comparison, set
+  `LND_REMOTE_HOST` in the untracked `config/lnd-ops.env` **on the local
+  node** -- `bin/lnd-fee-alert.sh` runs there and compares against the remote,
+  and `scripts/install.sh` skips it for `--role remote`. Unset, it reports
+  local figures and skips the remote side.
